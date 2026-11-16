@@ -18,12 +18,13 @@ assert(fs.existsSync(path.join(ADMIN_DIR, 'index.html')), 'Falta public/admin/in
 assert(fs.existsSync(path.join(ADMIN_DIR, 'config.yml')), 'Falta public/admin/config.yml');
 
 const htmlContent = fs.readFileSync(path.join(ADMIN_DIR, 'index.html'), 'utf-8');
-assert(htmlContent.includes('@sveltia/cms'), 'index.html no carga la librería @sveltia/cms');
+assert(htmlContent.includes('@sveltia/cms@0.266.0'), 'index.html no fija la versión estable @sveltia/cms@0.266.0');
 assert(htmlContent.includes('rel="cms-config-url"'), 'index.html no enlaza config.yml de forma relativa');
 
 const yamlContent = fs.readFileSync(path.join(ADMIN_DIR, 'config.yml'), 'utf-8');
 assert(yamlContent.includes('backend:'), 'config.yml no define backend');
 assert(yamlContent.includes('name: github'), 'config.yml no configura backend de GitHub');
+assert(!yamlContent.includes('local_backend'), 'config.yml no debe incluir local_backend (obsoleto en Sveltia CMS)');
 assert(yamlContent.includes('folder: "src/content/docs"'), 'config.yml no apunta a src/content/docs');
 assert(yamlContent.includes('template: "{{uuid}}"'), 'config.yml no define plantilla {{uuid}}');
 assert(yamlContent.includes('editable: false'), 'config.yml permite editar el slug (debe ser editable: false)');

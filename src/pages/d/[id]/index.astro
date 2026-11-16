@@ -129,6 +129,18 @@ const formattedUpdatedAt = new Intl.DateTimeFormat('es-ES', {
 
     <script>
       function setupCopyButtons() {
+        // Resolver imágenes de /uploads/ bajo BASE_PATH en entornos como GitHub Pages
+        const currentBase = document.querySelector('link[rel="icon"]')?.getAttribute('href')?.replace(/favicon\.svg$/, '') || '';
+        const cleanBase = currentBase.replace(/\/$/, '');
+        if (cleanBase) {
+          document.querySelectorAll('.markdown-body img').forEach((img) => {
+            const src = img.getAttribute('src');
+            if (src && src.startsWith('/uploads/')) {
+              img.setAttribute('src', `${cleanBase}${src}`);
+            }
+          });
+        }
+
         const copyStatus = document.getElementById('copy-status');
         const showCopiedMessage = () => {
           if (!copyStatus) return;

@@ -4,9 +4,6 @@ backend:
   repo: sant1/publidoc
   branch: main
 
-# Habilitar desarrollo local (soporta API de Sistema de Archivos del navegador y proxy local)
-local_backend: true
-
 # Gestión de medios estáticos
 media_folder: "public/uploads"
 public_folder: "/uploads"
