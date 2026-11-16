@@ -1,0 +1,71 @@
+# Configuración de Sveltia CMS — Public Document Hub
+backend:
+  name: github
+  repo: sant1/publidoc
+  branch: main
+
+# Habilitar desarrollo local (soporta API de Sistema de Archivos del navegador y proxy local)
+local_backend: true
+
+# Gestión de medios estáticos
+media_folder: "public/uploads"
+public_folder: "/uploads"
+
+# Colecciones documentales
+collections:
+  - name: "docs"
+    label: "Documentos"
+    label_singular: "Documento"
+    folder: "src/content/docs"
+    extension: "md"
+    format: "frontmatter"
+    create: true
+    delete: true
+    # Identificador inmutable UUID v4 generado automáticamente y no editable
+    slug:
+      template: "{{uuid}}"
+      editable: false
+    summary: "{{title}} ({{updatedAt}})"
+    sortable_fields:
+      - "updatedAt"
+      - "title"
+      - "createdAt"
+    fields:
+      - label: "Título"
+        name: "title"
+        widget: "string"
+        required: true
+
+      - label: "Descripción"
+        name: "description"
+        widget: "text"
+        required: false
+
+      - label: "Etiquetas"
+        name: "tags"
+        widget: "list"
+        required: false
+        default: []
+
+      - label: "Fecha de creación"
+        name: "createdAt"
+        widget: "datetime"
+        format: "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+        date_format: "YYYY-MM-DD"
+        time_format: "HH:mm:ss"
+        picker_utc: true
+        required: true
+
+      - label: "Fecha de actualización"
+        name: "updatedAt"
+        widget: "datetime"
+        format: "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+        date_format: "YYYY-MM-DD"
+        time_format: "HH:mm:ss"
+        picker_utc: true
+        required: true
+
+      - label: "Contenido Markdown"
+        name: "body"
+        widget: "markdown"
+        required: true

@@ -9,7 +9,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "node tests/phase2-validation.test.mjs"
+    "test": "node tests/phase2-validation.test.mjs && node tests/phase3-sveltia-lifecycle.test.mjs",
+    "test:phase2": "node tests/phase2-validation.test.mjs",
+    "test:phase3": "node tests/phase3-sveltia-lifecycle.test.mjs"
   },
   "keywords": [
     "documentation",
