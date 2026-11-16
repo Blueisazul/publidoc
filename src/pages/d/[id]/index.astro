@@ -20,8 +20,11 @@ const baseUrl = import.meta.env.BASE_URL.endsWith('/')
   : `${import.meta.env.BASE_URL}/`;
 
 const siteUrl = Astro.site ? Astro.site.toString().replace(/\/$/, '') : '';
-const publicPageUrl = `${siteUrl}${baseUrl}d/${doc.id}/`;
-const rawMarkdownUrl = `${siteUrl}${baseUrl}d/${doc.id}/raw.md`;
+const relativeDocPath = `${baseUrl}d/${doc.id}/`;
+const relativeRawPath = `${baseUrl}d/${doc.id}/raw.md`;
+
+const publicPageUrl = `${siteUrl}${relativeDocPath}`;
+const rawMarkdownUrl = `${siteUrl}${relativeRawPath}`;
 
 const formattedCreatedAt = new Intl.DateTimeFormat('es-ES', {
   year: 'numeric',
@@ -101,13 +104,13 @@ const formattedUpdatedAt = new Intl.DateTimeFormat('es-ES', {
             Usa el enlace Markdown para consultar o alimentar agentes de IA (como ChatGPT) con el documento íntegro.
           </p>
           <div class="action-group" style="margin: 0;">
-            <a href={rawMarkdownUrl} target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="raw-link">
+            <a href={relativeRawPath} target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="raw-link" data-raw-url={rawMarkdownUrl}>
               📄 Ver Markdown original
             </a>
-            <button type="button" class="btn btn-outline" id="btn-copy-url" data-url={publicPageUrl}>
+            <button type="button" class="btn btn-outline" id="btn-copy-url" data-url={publicPageUrl} data-relative={relativeDocPath}>
               🔗 Copiar enlace público
             </button>
-            <button type="button" class="btn btn-outline" id="btn-copy-raw" data-url={rawMarkdownUrl}>
+            <button type="button" class="btn btn-outline" id="btn-copy-raw" data-url={rawMarkdownUrl} data-relative={relativeRawPath}>
               📋 Copiar enlace Markdown
             </button>
           </div>
@@ -153,18 +156,30 @@ const formattedUpdatedAt = new Intl.DateTimeFormat('es-ES', {
         const copyPublicBtn = document.getElementById('btn-copy-url');
         if (copyPublicBtn) {
           copyPublicBtn.addEventListener('click', async () => {
-            const url = copyPublicBtn.getAttribute('data-url') || window.location.href;
-            await navigator.clipboard.writeText(url);
-            showCopiedMessage();
+            let url = copyPublicBtn.getAttribute('data-url') || '';
+            if (typeof window !== 'undefined' && window.location) {
+              const rel = copyPublicBtn.getAttribute('data-relative') || '';
+              url = rel ? new URL(rel, window.location.origin).href : window.location.href;
+            }
+            if (url) {
+              await navigator.clipboard.writeText(url);
+              showCopiedMessage();
+            }
           });
         }
 
         const copyRawBtn = document.getElementById('btn-copy-raw');
         if (copyRawBtn) {
           copyRawBtn.addEventListener('click', async () => {
-            const rawUrl = copyRawBtn.getAttribute('data-url') || '';
-            await navigator.clipboard.writeText(rawUrl);
-            showCopiedMessage();
+            let rawUrl = copyRawBtn.getAttribute('data-url') || '';
+            if (typeof window !== 'undefined' && window.location) {
+              const rel = copyRawBtn.getAttribute('data-relative') || '';
+              rawUrl = rel ? new URL(rel, window.location.origin).href : rawUrl;
+            }
+            if (rawUrl) {
+              await navigator.clipboard.writeText(rawUrl);
+              showCopiedMessage();
+            }
           });
         }
       }
