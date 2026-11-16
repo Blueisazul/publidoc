@@ -5,6 +5,8 @@ import path from 'node:path';
 
 export const prerender = true;
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getStaticPaths() {
   const docs = await getCollection('docs');
   return docs.map((doc) => ({
@@ -15,6 +17,17 @@ export async function getStaticPaths() {
 
 export const GET: APIRoute = async ({ props }) => {
   const { docId } = props as { docId: string };
+
+  // Validar formato UUID para prevenir inyecciones o rutas no válidas
+  if (!docId || !UUID_REGEX.test(docId)) {
+    return new Response('Identificador de documento no válido', {
+      status: 400,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
+  }
+
   const filePath = path.resolve(process.cwd(), 'src/content/docs', `${docId}.md`);
 
   if (!fs.existsSync(filePath)) {
@@ -26,18 +39,10 @@ export const GET: APIRoute = async ({ props }) => {
     });
   }
 
-  // Leer el archivo original íntegramente
-  let rawContent = fs.readFileSync(filePath, 'utf-8');
+  // Lectura binaria pura mediante Buffer sin mutaciones (sin alterar BOM ni saltos de línea)
+  const buffer = fs.readFileSync(filePath);
 
-  // Eliminar BOM si estuviera presente
-  if (rawContent.charCodeAt(0) === 0xFEFF) {
-    rawContent = rawContent.slice(1);
-  }
-
-  // Normalizar saltos de línea estrictamente a LF (\n)
-  rawContent = rawContent.replace(/\r\n/g, '\n');
-
-  return new Response(rawContent, {
+  return new Response(buffer, {
     status: 200,
     headers: {
       'Content-Type': 'text/markdown; charset=utf-8',

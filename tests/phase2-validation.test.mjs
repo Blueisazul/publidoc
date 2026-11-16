@@ -7,7 +7,7 @@ const ROOT_DIR = process.cwd();
 const CONTENT_DIR = path.join(ROOT_DIR, 'src', 'content', 'docs');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 
-console.log('=== SUITE DE PRUEBAS AUTOMATIZADAS — FASE 2 ===\n');
+console.log('=== SUITE DE PRUEBAS AUTOMATIZADAS — FASE 2 (VALIDACIÓN DE INTEGRIDAD BINARIA) ===\n');
 
 let passedTests = 0;
 let totalTests = 0;
@@ -34,8 +34,51 @@ if (!fs.existsSync(DIST_DIR)) {
 const docFiles = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
 assert(docFiles.length >= 3, 'Debe haber al menos 3 documentos de prueba en src/content/docs');
 
-// TEST 1: Existencia de la página HTML
-runTest('1. Existencia de la página HTML para cada documento', () => {
+// TEST 1: Verificación independiente de documentos fuente (UTF-8, sin BOM, saltos LF)
+runTest('1. Verificación independiente de documentos fuente (UTF-8 válido, sin BOM, saltos LF)', () => {
+  for (const file of docFiles) {
+    const srcPath = path.join(CONTENT_DIR, file);
+    const buf = fs.readFileSync(srcPath);
+
+    // Verificación de ausencia de BOM
+    const hasBOM = buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
+    assert(!hasBOM, `El archivo fuente ${file} contiene BOM`);
+
+    // Verificación de UTF-8 estricto
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let text;
+    try {
+      text = decoder.decode(buf);
+    } catch (e) {
+      assert.fail(`El archivo fuente ${file} no tiene codificación UTF-8 válida: ${e.message}`);
+    }
+    assert(!text.includes('\uFFFD'), `El archivo fuente ${file} contiene caracteres corruptos de reemplazo (U+FFFD)`);
+
+    // Verificación estricta de saltos de línea LF (ausencia de \r y \r\n)
+    const hasCR = buf.includes(0x0D); // 0x0D es '\r'
+    assert(!hasCR, `El archivo fuente ${file} contiene retornos de carro CRLF o CR; debe ser estrictamente LF`);
+  }
+});
+
+// TEST 2: Validación de formato UUID e inmunidad a inyecciones de ruta
+runTest('2. Validación de formato UUID en endpoint raw.md (regex estricta)', () => {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  // UUIDs válidos de los documentos
+  for (const file of docFiles) {
+    const id = path.basename(file, '.md');
+    assert(UUID_REGEX.test(id), `El ID ${id} no cumple el patrón UUID`);
+  }
+
+  // Cadenas inválidas que deben ser rechazadas
+  const invalidIds = ['../../etc/passwd', 'slug-titulo-documento', '12345', 'uuid-invalido!', ''];
+  for (const invalid of invalidIds) {
+    assert(!UUID_REGEX.test(invalid), `El UUID inválido "${invalid}" fue aceptado incorrectamente`);
+  }
+});
+
+// TEST 3: Existencia de la página HTML para cada documento
+runTest('3. Existencia de la página HTML para cada documento', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
     const htmlPath = path.join(DIST_DIR, 'd', id, 'index.html');
@@ -45,8 +88,8 @@ runTest('1. Existencia de la página HTML para cada documento', () => {
   }
 });
 
-// TEST 2: Existencia del archivo Markdown
-runTest('2. Existencia del archivo Markdown estático raw.md para cada documento', () => {
+// TEST 4: Existencia del archivo Markdown estático raw.md para cada documento
+runTest('4. Existencia del archivo Markdown estático raw.md para cada documento', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
     const rawPath = path.join(DIST_DIR, 'd', id, 'raw.md');
@@ -56,18 +99,31 @@ runTest('2. Existencia del archivo Markdown estático raw.md para cada documento
   }
 });
 
-// TEST 3: Igualdad byte a byte entre el Markdown original y el generado
-runTest('3. Igualdad byte a byte entre Markdown original y dist/d/[id]/raw.md', () => {
+// TEST 5: Igualdad byte a byte estricta entre origen y dist (comparación binaria Buffer.compare sin normalización)
+runTest('5. Igualdad byte a byte estricta (Buffer.compare === 0) sin normalización alguna', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
+    // Lectura binaria pura de ambos archivos sin transformaciones
     const srcBuf = fs.readFileSync(path.join(CONTENT_DIR, file));
     const distBuf = fs.readFileSync(path.join(DIST_DIR, 'd', id, 'raw.md'));
-    assert(srcBuf.equals(distBuf), `Los bytes del documento ${id} difieren entre fuente y dist`);
+
+    assert.strictEqual(
+      srcBuf.length,
+      distBuf.length,
+      `Longitud de buffers distinta para ${id} (fuente: ${srcBuf.length}, dist: ${distBuf.length})`
+    );
+
+    const diff = Buffer.compare(srcBuf, distBuf);
+    assert.strictEqual(
+      diff,
+      0,
+      `Los bytes del archivo generado dist/d/${id}/raw.md difieren de src/content/docs/${file} (Buffer.compare = ${diff})`
+    );
   }
 });
 
-// TEST 4: Conservación del frontmatter YAML
-runTest('4. Conservación íntegra del frontmatter YAML', () => {
+// TEST 6: Conservación del frontmatter YAML
+runTest('6. Conservación íntegra del frontmatter YAML en el archivo generado', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
     const distContent = fs.readFileSync(path.join(DIST_DIR, 'd', id, 'raw.md'), 'utf-8');
@@ -81,31 +137,31 @@ runTest('4. Conservación íntegra del frontmatter YAML', () => {
   }
 });
 
-// TEST 5: Correcta codificación UTF-8
-runTest('5. Correcta codificación UTF-8 sin caracteres de reemplazo', () => {
+// TEST 7: Correcta codificación UTF-8 en el archivo generado
+runTest('7. Correcta codificación UTF-8 en dist/d/[id]/raw.md', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
     const rawPath = path.join(DIST_DIR, 'd', id, 'raw.md');
     const buf = fs.readFileSync(rawPath);
     const decoder = new TextDecoder('utf-8', { fatal: true });
     const text = decoder.decode(buf);
-    assert(!text.includes('\uFFFD'), `El documento ${id} contiene caracteres corruptos de reemplazo UTF-8 (U+FFFD)`);
+    assert(!text.includes('\uFFFD'), `El documento generado ${id} contiene caracteres corruptos de reemplazo (U+FFFD)`);
   }
 });
 
-// TEST 6: Ausencia de BOM (Byte Order Mark)
-runTest('6. Ausencia total de BOM (0xEF, 0xBB, 0xBF)', () => {
+// TEST 8: Ausencia total de BOM en el archivo generado
+runTest('8. Ausencia total de BOM (0xEF, 0xBB, 0xBF) en dist/d/[id]/raw.md', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
     const rawPath = path.join(DIST_DIR, 'd', id, 'raw.md');
     const buf = fs.readFileSync(rawPath);
     const hasBOM = buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
-    assert(!hasBOM, `El archivo ${rawPath} contiene BOM no deseado`);
+    assert(!hasBOM, `El archivo generado ${rawPath} contiene BOM no deseado`);
   }
 });
 
-// TEST 7: Funcionamiento con títulos y contenido en español
-runTest('7. Funcionamiento correcto con acentos, eñes y signos de apertura en español', () => {
+// TEST 9: Funcionamiento con títulos y contenido en español
+runTest('9. Funcionamiento correcto con acentos, eñes y signos de apertura en español', () => {
   const spanishDocId = '3f5a2b10-7e4d-4c3a-9b1f-6a8e5d2c9b4a';
   const rawContent = fs.readFileSync(path.join(DIST_DIR, 'd', spanishDocId, 'raw.md'), 'utf-8');
   const htmlContent = fs.readFileSync(path.join(DIST_DIR, 'd', spanishDocId, 'index.html'), 'utf-8');
@@ -117,8 +173,8 @@ runTest('7. Funcionamiento correcto con acentos, eñes y signos de apertura en e
   assert(htmlContent.includes('¿Qué ventajas ofrece este sistema?'), 'Falta pregunta con signo de apertura en HTML');
 });
 
-// TEST 8: Funcionamiento con emojis y caracteres especiales
-runTest('8. Preservación íntegra de emojis y símbolos matemáticos/especiales', () => {
+// TEST 10: Preservación de emojis y símbolos especiales
+runTest('10. Preservación íntegra de emojis y símbolos matemáticos/especiales', () => {
   const emojiDocId = 'b7c9e1f2-4a3d-4e5f-8b2a-1c3d5e7f9a0b';
   const rawContent = fs.readFileSync(path.join(DIST_DIR, 'd', emojiDocId, 'raw.md'), 'utf-8');
   const htmlContent = fs.readFileSync(path.join(DIST_DIR, 'd', emojiDocId, 'index.html'), 'utf-8');
@@ -130,8 +186,8 @@ runTest('8. Preservación íntegra de emojis y símbolos matemáticos/especiales
   }
 });
 
-// TEST 9: Funcionamiento con documentos largos y estructuras complejas
-runTest('9. Funcionamiento correcto con documentos extensos (>2 KB, tablas y código)', () => {
+// TEST 11: Funcionamiento con documentos largos y estructuras complejas
+runTest('11. Funcionamiento correcto con documentos extensos (>2 KB, tablas y código)', () => {
   const longDocId = 'd4e5f6a7-1b2c-4d3e-8f9a-0b1c2d3e4f5a';
   const rawContent = fs.readFileSync(path.join(DIST_DIR, 'd', longDocId, 'raw.md'), 'utf-8');
   const htmlContent = fs.readFileSync(path.join(DIST_DIR, 'd', longDocId, 'index.html'), 'utf-8');
@@ -143,22 +199,18 @@ runTest('9. Funcionamiento correcto con documentos extensos (>2 KB, tablas y có
   assert(htmlContent.includes('DocumentMetadata') && htmlContent.includes('interface'), 'El HTML no renderizó el código');
 });
 
-// TEST 10: Compilación limpia sin documentos
-runTest('10. Compilación limpia cuando la colección no tiene documentos', () => {
+// TEST 12: Compilación limpia sin documentos
+runTest('12. Compilación limpia cuando la colección no tiene documentos', () => {
   const tempBackupDir = path.join(ROOT_DIR, 'src', 'content', '__docs_backup__');
   try {
-    // Mover temporalmente los documentos
     fs.renameSync(CONTENT_DIR, tempBackupDir);
     fs.mkdirSync(CONTENT_DIR, { recursive: true });
 
-    // Ejecutar compilación con colección vacía
     execSync('npm run build', { stdio: 'pipe' });
 
-    // Verificar que index.html se construyó sin errores
     const indexHtml = fs.readFileSync(path.join(DIST_DIR, 'index.html'), 'utf-8');
     assert(indexHtml.includes('No hay documentos publicados en este momento.'), 'El índice vacío no muestra el mensaje esperado');
   } finally {
-    // Restaurar los documentos
     if (fs.existsSync(tempBackupDir)) {
       if (fs.existsSync(CONTENT_DIR)) {
         fs.rmSync(CONTENT_DIR, { recursive: true, force: true });
@@ -168,10 +220,9 @@ runTest('10. Compilación limpia cuando la colección no tiene documentos', () =
   }
 });
 
-// TEST 11: Respeto de BASE_PATH en GitHub Pages
-runTest('11. Respeto de BASE_PATH para subrutas en GitHub Pages', () => {
+// TEST 13: Respeto de BASE_PATH en GitHub Pages
+runTest('13. Respeto de BASE_PATH para subrutas en GitHub Pages', () => {
   try {
-    // Compilar con BASE_PATH personalizado
     execSync('npm run build', {
       stdio: 'pipe',
       env: {
@@ -189,14 +240,13 @@ runTest('11. Respeto de BASE_PATH para subrutas en GitHub Pages', () => {
     assert(docHtml.includes('href="/publidoc/favicon.svg"'), 'El doc no respeta BASE_PATH en favicon');
     assert(docHtml.includes('/publidoc/d/3f5a2b10-7e4d-4c3a-9b1f-6a8e5d2c9b4a/raw.md'), 'El doc no respeta BASE_PATH en enlace raw');
   } finally {
-    // Recompilar para dejar dist/ en estado estándar
     execSync('npm run build', { stdio: 'pipe' });
   }
 });
 
-console.log(`\n========================================`);
+console.log(`\n======================================================`);
 console.log(`RESUMEN: ${passedTests}/${totalTests} pruebas superadas exitosamente.`);
-console.log(`========================================\n`);
+console.log(`======================================================\n`);
 
 if (passedTests !== totalTests) {
   process.exit(1);
