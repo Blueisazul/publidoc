@@ -1,0 +1,26 @@
+{
+  "name": "publidoc",
+  "version": "1.0.0",
+  "description": "Public Document Hub - Public and permanent documentation repository with AI/ChatGPT compatibility",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "keywords": [
+    "documentation",
+    "astro",
+    "markdown",
+    "sveltia-cms",
+    "chatgpt"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "astro": "^7.4.12",
+    "typescript": "^5.9.3"
+  }
+}
