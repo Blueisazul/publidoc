@@ -5,7 +5,8 @@ import path from 'node:path';
 
 export const prerender = true;
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Expresión regular canónica para UUID v4 (RFC 4122)
+export const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function getStaticPaths() {
   const docs = await getCollection('docs');
@@ -18,8 +19,8 @@ export async function getStaticPaths() {
 export const GET: APIRoute = async ({ props }) => {
   const { docId } = props as { docId: string };
 
-  // Validar formato UUID para prevenir inyecciones o rutas no válidas
-  if (!docId || !UUID_REGEX.test(docId)) {
+  // Validar formato UUID v4 estricto para prevenir inyecciones o rutas no válidas
+  if (!docId || !UUID_V4_REGEX.test(docId)) {
     return new Response('Identificador de documento no válido', {
       status: 400,
       headers: {

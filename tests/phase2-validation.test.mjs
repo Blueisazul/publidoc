@@ -1,13 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execSync } from 'node:child_process';
 import assert from 'node:assert';
 
 const ROOT_DIR = process.cwd();
 const CONTENT_DIR = path.join(ROOT_DIR, 'src', 'content', 'docs');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
+const RAW_ENDPOINT_FILE = path.join(ROOT_DIR, 'src', 'pages', 'd', '[id]', 'raw.md.ts');
 
-console.log('=== SUITE DE PRUEBAS AUTOMATIZADAS — FASE 2 (VALIDACIÓN DE INTEGRIDAD BINARIA) ===\n');
+console.log('=== SUITE DE PRUEBAS AUTOMATIZADAS — FASE 2 ===\n');
+
+// 1. COMPILACIÓN OBLIGATORIA SIEMPRE AL INICIO
+console.log('📦 Ejecutando compilación obligatoria limpia al inicio de la suite...');
+execSync('npm run build', { stdio: 'inherit' });
+console.log('✓ Compilación inicial completada.\n');
 
 let passedTests = 0;
 let totalTests = 0;
@@ -25,14 +32,8 @@ function runTest(name, fn) {
   }
 }
 
-// Asegurar que dist existe o compilarlo
-if (!fs.existsSync(DIST_DIR)) {
-  console.log('Compilando proyecto para pruebas...');
-  execSync('npm run build', { stdio: 'inherit' });
-}
-
 const docFiles = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
-assert(docFiles.length >= 3, 'Debe haber al menos 3 documentos de prueba en src/content/docs');
+assert.strictEqual(docFiles.length, 3, 'Deben existir exactamente 3 documentos de prueba en src/content/docs');
 
 // TEST 1: Verificación independiente de documentos fuente (UTF-8, sin BOM, saltos LF)
 runTest('1. Verificación independiente de documentos fuente (UTF-8 válido, sin BOM, saltos LF)', () => {
@@ -55,25 +56,48 @@ runTest('1. Verificación independiente de documentos fuente (UTF-8 válido, sin
     assert(!text.includes('\uFFFD'), `El archivo fuente ${file} contiene caracteres corruptos de reemplazo (U+FFFD)`);
 
     // Verificación estricta de saltos de línea LF (ausencia de \r y \r\n)
-    const hasCR = buf.includes(0x0D); // 0x0D es '\r'
+    const hasCR = buf.includes(0x0D);
     assert(!hasCR, `El archivo fuente ${file} contiene retornos de carro CRLF o CR; debe ser estrictamente LF`);
   }
 });
 
-// TEST 2: Validación de formato UUID e inmunidad a inyecciones de ruta
-runTest('2. Validación de formato UUID en endpoint raw.md (regex estricta)', () => {
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// TEST 2: Consistencia de UUID v4 (RFC 4122) comprobando la implementación real del endpoint
+runTest('2. Consistencia e implementación real de UUID v4 en raw.md.ts', () => {
+  const EXPECTED_REGEX_STR = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
   
-  // UUIDs válidos de los documentos
+  // Inspeccionar el código fuente real del endpoint raw.md.ts
+  const endpointSource = fs.readFileSync(RAW_ENDPOINT_FILE, 'utf-8');
+  assert(
+    endpointSource.includes(EXPECTED_REGEX_STR),
+    `El endpoint raw.md.ts no define la expresión regular esperada de UUID v4: ${EXPECTED_REGEX_STR}`
+  );
+  assert(
+    endpointSource.includes('UUID_V4_REGEX.test(docId)'),
+    'El endpoint raw.md.ts no valida docId mediante UUID_V4_REGEX.test'
+  );
+
+  // Expresión regular canónica extraída directamente
+  const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  // Comprobar que los identificadores de todos los documentos fuente cumplen estrictamente UUID v4
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
-    assert(UUID_REGEX.test(id), `El ID ${id} no cumple el patrón UUID`);
+    assert(uuidV4Regex.test(id), `El ID ${id} no es un UUID v4 válido (RFC 4122)`);
   }
 
-  // Cadenas inválidas que deben ser rechazadas
-  const invalidIds = ['../../etc/passwd', 'slug-titulo-documento', '12345', 'uuid-invalido!', ''];
-  for (const invalid of invalidIds) {
-    assert(!UUID_REGEX.test(invalid), `El UUID inválido "${invalid}" fue aceptado incorrectamente`);
+  // Comprobar que rechaza explícitamente ataques de path traversal, UUIDs v1/v3/v5 y slugs
+  const invalidCases = [
+    '../../etc/passwd',
+    '3f5a2b10-7e4d-1c3a-9b1f-6a8e5d2c9b4a', // v1 (el 3er bloque empieza en 1, no 4)
+    '3f5a2b10-7e4d-5c3a-9b1f-6a8e5d2c9b4a', // v5 (el 3er bloque empieza en 5, no 4)
+    '3f5a2b10-7e4d-4c3a-3b1f-6a8e5d2c9b4a', // variante inválida (el 4to bloque empieza en 3, no en [89ab])
+    'slug-arbitrario',
+    '12345',
+    ''
+  ];
+
+  for (const invalid of invalidCases) {
+    assert(!uuidV4Regex.test(invalid), `El patrón no rechazó el identificador inválido: "${invalid}"`);
   }
 });
 
@@ -99,11 +123,10 @@ runTest('4. Existencia del archivo Markdown estático raw.md para cada documento
   }
 });
 
-// TEST 5: Igualdad byte a byte estricta entre origen y dist (comparación binaria Buffer.compare sin normalización)
+// TEST 5: Igualdad byte a byte estricta entre origen y dist sin normalización alguna
 runTest('5. Igualdad byte a byte estricta (Buffer.compare === 0) sin normalización alguna', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
-    // Lectura binaria pura de ambos archivos sin transformaciones
     const srcBuf = fs.readFileSync(path.join(CONTENT_DIR, file));
     const distBuf = fs.readFileSync(path.join(DIST_DIR, 'd', id, 'raw.md'));
 
@@ -122,7 +145,7 @@ runTest('5. Igualdad byte a byte estricta (Buffer.compare === 0) sin normalizaci
   }
 });
 
-// TEST 6: Conservación del frontmatter YAML
+// TEST 6: Conservación del frontmatter YAML en el archivo generado
 runTest('6. Conservación íntegra del frontmatter YAML en el archivo generado', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
@@ -137,7 +160,7 @@ runTest('6. Conservación íntegra del frontmatter YAML en el archivo generado',
   }
 });
 
-// TEST 7: Correcta codificación UTF-8 en el archivo generado
+// TEST 7: Correcta codificación UTF-8 en dist/d/[id]/raw.md
 runTest('7. Correcta codificación UTF-8 en dist/d/[id]/raw.md', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
@@ -149,7 +172,7 @@ runTest('7. Correcta codificación UTF-8 en dist/d/[id]/raw.md', () => {
   }
 });
 
-// TEST 8: Ausencia total de BOM en el archivo generado
+// TEST 8: Ausencia total de BOM (0xEF, 0xBB, 0xBF) en dist/d/[id]/raw.md
 runTest('8. Ausencia total de BOM (0xEF, 0xBB, 0xBF) en dist/d/[id]/raw.md', () => {
   for (const file of docFiles) {
     const id = path.basename(file, '.md');
@@ -199,23 +222,34 @@ runTest('11. Funcionamiento correcto con documentos extensos (>2 KB, tablas y c�
   assert(htmlContent.includes('DocumentMetadata') && htmlContent.includes('interface'), 'El HTML no renderizó el código');
 });
 
-// TEST 12: Compilación limpia sin documentos
-runTest('12. Compilación limpia cuando la colección no tiene documentos', () => {
-  const tempBackupDir = path.join(ROOT_DIR, 'src', 'content', '__docs_backup__');
-  try {
-    fs.renameSync(CONTENT_DIR, tempBackupDir);
-    fs.mkdirSync(CONTENT_DIR, { recursive: true });
+// TEST 12: Compilación limpia sin documentos (aislamiento seguro fuera del proyecto en os.tmpdir)
+runTest('12. Compilación limpia cuando la colección no tiene documentos (con restauración segura en os.tmpdir)', () => {
+  const tempBackupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'publidoc-docs-safe-backup-'));
 
+  try {
+    // Copiar documentos al directorio temporal del sistema operativo (completamente fuera del repo)
+    for (const file of fs.readdirSync(CONTENT_DIR)) {
+      fs.copyFileSync(path.join(CONTENT_DIR, file), path.join(tempBackupDir, file));
+    }
+
+    // Vaciar CONTENT_DIR para simular colección sin documentos
+    for (const file of fs.readdirSync(CONTENT_DIR)) {
+      fs.unlinkSync(path.join(CONTENT_DIR, file));
+    }
+
+    // Ejecutar compilación con colección vacía
     execSync('npm run build', { stdio: 'pipe' });
 
+    // Verificar que el índice se construyó con el mensaje correspondiente
     const indexHtml = fs.readFileSync(path.join(DIST_DIR, 'index.html'), 'utf-8');
     assert(indexHtml.includes('No hay documentos publicados en este momento.'), 'El índice vacío no muestra el mensaje esperado');
   } finally {
+    // Restaurar incondicionalmente los documentos originales desde el backup temporal
     if (fs.existsSync(tempBackupDir)) {
-      if (fs.existsSync(CONTENT_DIR)) {
-        fs.rmSync(CONTENT_DIR, { recursive: true, force: true });
+      for (const file of fs.readdirSync(tempBackupDir)) {
+        fs.copyFileSync(path.join(tempBackupDir, file), path.join(CONTENT_DIR, file));
       }
-      fs.renameSync(tempBackupDir, CONTENT_DIR);
+      fs.rmSync(tempBackupDir, { recursive: true, force: true });
     }
   }
 });
@@ -240,9 +274,25 @@ runTest('13. Respeto de BASE_PATH para subrutas en GitHub Pages', () => {
     assert(docHtml.includes('href="/publidoc/favicon.svg"'), 'El doc no respeta BASE_PATH en favicon');
     assert(docHtml.includes('/publidoc/d/3f5a2b10-7e4d-4c3a-9b1f-6a8e5d2c9b4a/raw.md'), 'El doc no respeta BASE_PATH en enlace raw');
   } finally {
+    // Recompilar en modo estándar para dejar dist/ listo y en estado óptimo
     execSync('npm run build', { stdio: 'pipe' });
   }
 });
+
+// COMPROBACIONES FINALES POST-SUITE
+console.log('\n--- VERIFICACIONES DE CIERRE ---');
+const postFiles = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
+assert.strictEqual(postFiles.length, 3, `ERROR CRÍTICO: Los documentos fuente no quedaron íntegros (encontrados: ${postFiles.length})`);
+console.log(`✓ Integridad de fuentes: Los 3 documentos siguen presentes en ${CONTENT_DIR}`);
+
+for (const file of postFiles) {
+  const id = path.basename(file, '.md');
+  const srcBuf = fs.readFileSync(path.join(CONTENT_DIR, file));
+  const distBuf = fs.readFileSync(path.join(DIST_DIR, 'd', id, 'raw.md'));
+  const diff = Buffer.compare(srcBuf, distBuf);
+  assert.strictEqual(diff, 0, `ERROR CRÍTICO: dist/d/${id}/raw.md no mantiene igualdad binaria`);
+}
+console.log('✓ Igualdad binaria verificada: todos los dist/d/[id]/raw.md son bit-exactos con sus fuentes.');
 
 console.log(`\n======================================================`);
 console.log(`RESUMEN: ${passedTests}/${totalTests} pruebas superadas exitosamente.`);

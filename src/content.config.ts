@@ -4,7 +4,7 @@ import { glob } from 'astro/loaders';
 const docs = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/docs' }),
   schema: z.object({
-    title: z.string(),
+    title: z.string().trim().min(1, 'El título es obligatorio'),
     description: z.string().optional(),
     tags: z.array(z.string()).default([]),
     createdAt: z.coerce.date(),
