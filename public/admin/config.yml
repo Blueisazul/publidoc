@@ -1,8 +1,9 @@
 # Configuración de Sveltia CMS — Public Document Hub
 backend:
   name: github
-  repo: sant1/publidoc
+  repo: Blueisazul/publidoc
   branch: main
+  base_url: https://autumn-silence-2cb3.sabinorthr.workers.dev
 
 # Gestión de medios estáticos
 media_folder: "public/uploads"

@@ -24,6 +24,13 @@ assert(htmlContent.includes('rel="cms-config-url"'), 'index.html no enlaza confi
 const yamlContent = fs.readFileSync(path.join(ADMIN_DIR, 'config.yml'), 'utf-8');
 assert(yamlContent.includes('backend:'), 'config.yml no define backend');
 assert(yamlContent.includes('name: github'), 'config.yml no configura backend de GitHub');
+assert(yamlContent.includes('repo: Blueisazul/publidoc'), 'config.yml no apunta al repositorio definitivo Blueisazul/publidoc');
+assert(yamlContent.includes('branch: main'), 'config.yml no apunta a la rama main');
+assert(yamlContent.includes('base_url: https://autumn-silence-2cb3.sabinorthr.workers.dev'), 'config.yml no configura base_url: https://autumn-silence-2cb3.sabinorthr.workers.dev');
+assert(!yamlContent.includes('base_url: https://autumn-silence-2cb3.sabinorthr.workers.dev/'), 'base_url no debe incluir barra final');
+assert(!yamlContent.includes('/callback'), 'base_url no debe incluir la ruta /callback');
+assert(!yamlContent.includes('sant1'), 'No deben existir referencias al usuario sant1');
+assert(!yamlContent.includes('client_secret'), 'config.yml no debe incluir secretos OAuth');
 assert(!yamlContent.includes('local_backend'), 'config.yml no debe incluir local_backend (obsoleto en Sveltia CMS)');
 assert(yamlContent.includes('folder: "src/content/docs"'), 'config.yml no apunta a src/content/docs');
 assert(yamlContent.includes('template: "{{uuid}}"'), 'config.yml no define plantilla {{uuid}}');
