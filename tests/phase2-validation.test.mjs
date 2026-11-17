@@ -33,7 +33,7 @@ function runTest(name, fn) {
 }
 
 const docFiles = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
-assert.strictEqual(docFiles.length, 3, 'Deben existir exactamente 3 documentos de prueba en src/content/docs');
+assert(docFiles.length >= 3, `Deben existir al menos 3 documentos en src/content/docs (actuales: ${docFiles.length})`);
 
 // TEST 1: Verificación independiente de documentos fuente (UTF-8, sin BOM, saltos LF)
 runTest('1. Verificación independiente de documentos fuente (UTF-8 válido, sin BOM, saltos LF)', () => {
@@ -282,8 +282,8 @@ runTest('13. Respeto de BASE_PATH para subrutas en GitHub Pages', () => {
 // COMPROBACIONES FINALES POST-SUITE
 console.log('\n--- VERIFICACIONES DE CIERRE ---');
 const postFiles = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
-assert.strictEqual(postFiles.length, 3, `ERROR CRÍTICO: Los documentos fuente no quedaron íntegros (encontrados: ${postFiles.length})`);
-console.log(`✓ Integridad de fuentes: Los 3 documentos siguen presentes en ${CONTENT_DIR}`);
+assert.strictEqual(postFiles.length, docFiles.length, `ERROR CRÍTICO: Los documentos fuente no quedaron íntegros (esperados: ${docFiles.length}, encontrados: ${postFiles.length})`);
+console.log(`✓ Integridad de fuentes: Los ${postFiles.length} documentos siguen presentes en ${CONTENT_DIR}`);
 
 for (const file of postFiles) {
   const id = path.basename(file, '.md');

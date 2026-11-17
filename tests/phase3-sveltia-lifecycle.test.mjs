@@ -35,6 +35,9 @@ assert(!yamlContent.includes('local_backend'), 'config.yml no debe incluir local
 assert(yamlContent.includes('folder: "src/content/docs"'), 'config.yml no apunta a src/content/docs');
 assert(yamlContent.includes('template: "{{uuid}}"'), 'config.yml no define plantilla {{uuid}}');
 assert(yamlContent.includes('editable: false'), 'config.yml permite editar el slug (debe ser editable: false)');
+assert(yamlContent.includes('name: "categories"'), 'config.yml no define la colección categories');
+assert(yamlContent.includes('folder: "src/content/categories"'), 'config.yml no apunta a src/content/categories');
+assert(yamlContent.includes('widget: "relation"'), 'config.yml no define widget de relación para categoría');
 console.log('✓ Archivos de administración y configuración validados.\n');
 
 // 2. Simulación del ciclo de vida de Sveltia CMS
@@ -52,6 +55,7 @@ console.log('\n--- PASO A: CREACIÓN DE DOCUMENTO ---');
 const createdContent = `---
 title: "Documento Creado desde Sveltia CMS"
 description: "Documento de prueba para validar el ciclo de vida del CMS."
+category: "pruebas"
 tags:
   - "sveltia"
   - "cms"
@@ -89,6 +93,7 @@ console.log('\n--- PASO B: EDICIÓN DE DOCUMENTO (INMUTABILIDAD DE UUID) ---');
 const updatedContent = `---
 title: "Título Modificado Tras Edición Editorial"
 description: "Descripción actualizada tras revisión."
+category: "pruebas"
 tags:
   - "sveltia"
   - "cms"

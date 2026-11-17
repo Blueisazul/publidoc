@@ -15,6 +15,10 @@ export async function getStaticPaths() {
 const { doc } = Astro.props;
 const { Content } = await render(doc);
 
+const categories = await getCollection('categories');
+const categoryObj = categories.find((c) => c.id === doc.data.category);
+const categoryName = categoryObj ? categoryObj.data.name : (doc.data.category || 'General');
+
 const baseUrl = import.meta.env.BASE_URL.endsWith('/') 
   ? import.meta.env.BASE_URL 
   : `${import.meta.env.BASE_URL}/`;
@@ -84,6 +88,7 @@ const formattedUpdatedAt = new Intl.DateTimeFormat('es-ES', {
         )}
 
         <div class="meta-bar">
+          <span>📁 Categoría: <strong>{categoryName}</strong></span>
           <span>📅 Creado: <time datetime={doc.data.createdAt.toISOString()}>{formattedCreatedAt}</time></span>
           <span>🔄 Actualizado: <time datetime={doc.data.updatedAt.toISOString()}>{formattedUpdatedAt}</time></span>
           <span>🔑 ID: <code>{doc.id}</code></span>

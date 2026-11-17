@@ -5,11 +5,53 @@ import '../styles/global.css';
 export const prerender = true;
 
 const docs = await getCollection('docs');
+const rawCategories = await getCollection('categories');
 
-// Ordenar por fecha de actualización descendente
-const sortedDocs = docs.sort(
-  (a, b) => b.data.updatedAt.getTime() - a.data.updatedAt.getTime()
-);
+// Ordenar categorías: por 'order' ascendente; desempate alfabético por 'name'
+const categories = rawCategories.sort((a, b) => {
+  const orderA = a.data.order ?? 0;
+  const orderB = b.data.order ?? 0;
+  if (orderA !== orderB) return orderA - orderB;
+  return a.data.name.localeCompare(b.data.name, 'es');
+});
+
+// Agrupar documentos por categoría
+const docsByCategory = new Map();
+
+for (const cat of categories) {
+  docsByCategory.set(cat.id, {
+    category: cat,
+    docs: [] as typeof docs,
+  });
+}
+
+const uncategorizedDocs: typeof docs = [];
+
+for (const doc of docs) {
+  const catId = doc.data.category;
+  if (catId && docsByCategory.has(catId)) {
+    docsByCategory.get(catId)!.docs.push(doc);
+  } else {
+    uncategorizedDocs.push(doc);
+  }
+}
+
+// Ordenar los documentos de cada categoría por updatedAt descendente
+for (const entry of docsByCategory.values()) {
+  entry.docs.sort((a, b) => {
+    const timeA = (a.data.updatedAt || a.data.createdAt).getTime();
+    const timeB = (b.data.updatedAt || b.data.createdAt).getTime();
+    return timeB - timeA;
+  });
+}
+
+if (uncategorizedDocs.length > 0) {
+  uncategorizedDocs.sort((a, b) => {
+    const timeA = (a.data.updatedAt || a.data.createdAt).getTime();
+    const timeB = (b.data.updatedAt || b.data.createdAt).getTime();
+    return timeB - timeA;
+  });
+}
 
 const baseUrl = import.meta.env.BASE_URL.endsWith('/') 
   ? import.meta.env.BASE_URL 
@@ -32,11 +74,79 @@ const homeUrl = `${siteUrl}${baseUrl}`;
     <meta property="og:description" content="Centro de documentación pública accesible para personas y agentes de Inteligencia Artificial." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={homeUrl} />
+    <style>
+      .filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 0.45rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .filter-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+
+      .filter-btn:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      .filter-btn.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #ffffff;
+      }
+
+      .filter-btn.active .badge {
+        background: rgba(255, 255, 255, 0.25);
+        color: #ffffff;
+      }
+
+      .badge {
+        background: var(--tag-bg);
+        color: var(--tag-text);
+        font-size: 0.75rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 9999px;
+        font-weight: 600;
+      }
+
+      .category-header {
+        margin-bottom: 1.25rem;
+        border-bottom: 2px solid var(--border-color);
+        padding-bottom: 0.6rem;
+      }
+
+      .admin-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.75rem;
+        color: var(--text-muted);
+        border-color: var(--border-color);
+        transition: all 0.15s ease;
+      }
+
+      .admin-link:hover {
+        color: var(--primary);
+        border-color: var(--primary);
+      }
+    </style>
   </head>
   <body>
     <header>
       <a href={baseUrl} class="site-title">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
           <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -44,82 +154,213 @@ const homeUrl = `${siteUrl}${baseUrl}`;
         </svg>
         Public Document Hub
       </a>
-      <span style="font-size: 0.875rem; color: var(--text-muted);">
-        {docs.length} documento{docs.length === 1 ? '' : 's'} disponible{docs.length === 1 ? '' : 's'}
-      </span>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <span style="font-size: 0.875rem; color: var(--text-muted);" id="header-doc-count">
+          {docs.length} documento{docs.length === 1 ? '' : 's'} disponible{docs.length === 1 ? '' : 's'}
+        </span>
+        <a href={`${baseUrl}admin/`} class="btn btn-outline admin-link" title="Acceso al panel de administración (Sveltia CMS)" aria-label="Acceso al panel administrativo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          Administrar
+        </a>
+      </div>
     </header>
 
     <main>
       <section style="margin-bottom: 2rem;">
         <h1>Biblioteca de Documentos</h1>
         <p style="color: var(--text-muted); font-size: 1.1rem;">
-          Explora la colección de documentos técnicos y funcionales publicados. Cada documento cuenta con una URL pública permanente y acceso al contenido Markdown íntegro para agentes como ChatGPT.
+          Explora la colección de documentos técnicos y funcionales publicados. Cada documento cuenta con una URL pública permanente y acceso al contenido Markdown íntegro para personas y agentes de Inteligencia Artificial (como ChatGPT).
         </p>
       </section>
 
-      <section>
-        {sortedDocs.length === 0 ? (
+      <!-- Barra de Filtros por Categoría -->
+      <section style="margin-bottom: 2rem;">
+        <h2 style="font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border: none; margin-bottom: 0.75rem; padding: 0;">
+          Filtrar por categoría
+        </h2>
+        <div class="category-filter-bar" role="tablist" aria-label="Filtro de documentos por categoría" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          <button
+            type="button"
+            class="filter-btn active"
+            data-category="all"
+            role="tab"
+            aria-selected="true"
+            aria-controls="documents-container"
+          >
+            Todas <span class="badge">{docs.length}</span>
+          </button>
+          {categories.map((cat) => {
+            const count = docsByCategory.get(cat.id)?.docs.length || 0;
+            return (
+              <button
+                type="button"
+                class="filter-btn"
+                data-category={cat.id}
+                role="tab"
+                aria-selected="false"
+                aria-controls={`group-${cat.id}`}
+              >
+                {cat.data.name} <span class="badge">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <!-- Contenedor de grupos de documentos organizados por categoría -->
+      <section id="documents-container">
+        {categories.map((cat) => {
+          const catDocs = docsByCategory.get(cat.id)?.docs || [];
+          return (
+            <div class="category-group" id={`group-${cat.id}`} data-category-id={cat.id} style="margin-bottom: 2.5rem;">
+              <div class="category-header">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
+                  <h3 style="margin: 0; font-size: 1.35rem; display: inline-flex; align-items: center; gap: 0.5rem;">
+                    📁 {cat.data.name}
+                    <span class="badge" style="font-size: 0.75rem;">{catDocs.length}</span>
+                  </h3>
+                </div>
+                {cat.data.description && (
+                  <p style="margin: 0.35rem 0 0 0; font-size: 0.875rem; color: var(--text-muted);">
+                    {cat.data.description}
+                  </p>
+                )}
+              </div>
+
+              {catDocs.length === 0 ? (
+                <div class="card" style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                  No hay documentos publicados en esta categoría actualmente.
+                </div>
+              ) : (
+                <div class="doc-list">
+                  {catDocs.map((doc) => {
+                    const docUrl = `${baseUrl}d/${doc.id}/`;
+                    const rawUrl = `${baseUrl}d/${doc.id}/raw.md`;
+                    const formattedDate = new Intl.DateTimeFormat('es-ES', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    }).format(doc.data.updatedAt);
+
+                    return (
+                      <article class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
+                          <h4 style="margin: 0; font-size: 1.25rem; border: none; padding: 0;">
+                            <a href={docUrl} style="color: var(--text-main); text-decoration: none;">
+                              {doc.data.title}
+                            </a>
+                          </h4>
+                          <span style="font-size: 0.8rem; color: var(--text-muted);">
+                            Actualizado: {formattedDate}
+                          </span>
+                        </div>
+
+                        {doc.data.description && (
+                          <p style="color: var(--text-muted); margin: 0.75rem 0 0.5rem 0; font-size: 0.95rem;">
+                            {doc.data.description}
+                          </p>
+                        )}
+
+                        <div class="action-group" style="margin-top: 1rem; margin-bottom: 0;">
+                          <a href={docUrl} class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                            Leer documento →
+                          </a>
+                          <a href={rawUrl} target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                            Ver Markdown (raw)
+                          </a>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <!-- Grupo para documentos huérfanos si existiera alguno -->
+        {uncategorizedDocs.length > 0 && (
+          <div class="category-group" id="group-uncategorized" data-category-id="uncategorized" style="margin-bottom: 2.5rem;">
+            <div class="category-header">
+              <h3 style="margin: 0; font-size: 1.35rem; display: inline-flex; align-items: center; gap: 0.5rem;">
+                📁 Otros documentos
+                <span class="badge" style="font-size: 0.75rem;">{uncategorizedDocs.length}</span>
+              </h3>
+            </div>
+            <div class="doc-list">
+              {uncategorizedDocs.map((doc) => {
+                const docUrl = `${baseUrl}d/${doc.id}/`;
+                const rawUrl = `${baseUrl}d/${doc.id}/raw.md`;
+                return (
+                  <article class="card">
+                    <h4 style="margin: 0; font-size: 1.25rem;">
+                      <a href={docUrl} style="color: var(--text-main); text-decoration: none;">
+                        {doc.data.title}
+                      </a>
+                    </h4>
+                    <div class="action-group" style="margin-top: 1rem; margin-bottom: 0;">
+                      <a href={docUrl} class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                        Leer documento →
+                      </a>
+                      <a href={rawUrl} target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                        Ver Markdown (raw)
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <!-- Estado vacío global si la biblioteca estuviera vacía -->
+        {docs.length === 0 && (
           <div class="card" style="text-align: center; padding: 3rem 1rem;">
             <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 0;">
               No hay documentos publicados en este momento.
             </p>
-          </div>
-        ) : (
-          <div>
-            {sortedDocs.map((doc) => {
-              const docUrl = `${baseUrl}d/${doc.id}/`;
-              const rawUrl = `${baseUrl}d/${doc.id}/raw.md`;
-              const formattedDate = new Intl.DateTimeFormat('es-ES', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              }).format(doc.data.updatedAt);
-
-              return (
-                <article class="card">
-                  <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
-                    <h2 style="margin: 0; font-size: 1.35rem; border: none; padding: 0;">
-                      <a href={docUrl} style="color: var(--text-main); text-decoration: none;">
-                        {doc.data.title}
-                      </a>
-                    </h2>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">
-                      Actualizado: {formattedDate}
-                    </span>
-                  </div>
-
-                  {doc.data.description && (
-                    <p style="color: var(--text-muted); margin: 0.75rem 0 0.5rem 0; font-size: 0.95rem;">
-                      {doc.data.description}
-                    </p>
-                  )}
-
-                  {doc.data.tags && doc.data.tags.length > 0 && (
-                    <div class="tag-list" style="margin: 0.5rem 0 1rem 0;">
-                      {doc.data.tags.map((tag: string) => (
-                        <span class="tag">#{tag}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div class="action-group" style="margin-top: 1rem; margin-bottom: 0;">
-                    <a href={docUrl} class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
-                      Leer documento →
-                    </a>
-                    <a href={rawUrl} target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
-                      Ver Markdown (raw)
-                    </a>
-                  </div>
-                </article>
-              );
-            })}
           </div>
         )}
       </section>
     </main>
 
     <footer>
-      <p>Public Document Hub — Documentación estática impulsada por Astro y GitHub.</p>
+      <p>Public Document Hub — Documentación estática abierta e impulsada por Astro, Sveltia CMS y GitHub.</p>
     </footer>
+
+    <script is:inline>
+      function setupCategoryFilters() {
+        var filterButtons = document.querySelectorAll('.filter-btn');
+        var categoryGroups = document.querySelectorAll('.category-group');
+
+        filterButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var selectedCat = btn.getAttribute('data-category');
+
+            // Actualizar estado activo en los botones
+            filterButtons.forEach(function(b) {
+              var isActive = b === btn;
+              b.classList.toggle('active', isActive);
+              b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            // Filtrar grupos de categorías en el DOM
+            categoryGroups.forEach(function(group) {
+              var groupId = group.getAttribute('data-category-id');
+              if (selectedCat === 'all' || groupId === selectedCat) {
+                group.style.display = 'block';
+              } else {
+                group.style.display = 'none';
+              }
+            });
+          });
+        });
+      }
+
+      setupCategoryFilters();
+    </script>
   </body>
 </html>
